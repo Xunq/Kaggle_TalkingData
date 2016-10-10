@@ -1,0 +1,186 @@
+---
+title: "Exploratory Analysis - Talkingdata"
+author: "Xun Qiu"
+date: "October 2, 2016"
+output: html_document
+---
+
+```{r, echo=FALSE, message=FALSE}
+library(caret)
+library(gridExtra)
+library(ggplot2)
+library(data.table)
+library(dplyr)
+```
+
+#### 1.Background
+In the "TalkingData Mobile User Demographics" competition on Kaggle, we are challenged to predict mobile users' gender and age group based on information collected from TalkingData SDK. The training set contains infomation of 74000+ users, including their phone brand and device model. The phone usage information is also available for 30% of users, including apps running background, apps being actively used, time and geolocation where the info was collected. A detailed description of the data can be found on https://www.kaggle.com/c/talkingdata-mobile-user-demographics/data.
+
+#### 2.Exploratory Analysis
+To start with, we perform some exploratory analysis to better understand the data set, and to gain a better idea of what features would be useful in prediction.
+
+```{r, echo=FALSE, message=FALSE}
+# Load training data on gender&age
+genderage_train <- read.csv(file="gender_age_train.csv",header=T, numerals="no.loss")
+```
+
+In figure 1, the distribution of target groups is plotted. There are a total of 12 target groups, 6 of them are female in different ages, the 6 for male. Though there are more male than female in the training set, the distribution of the groups is not skewed. This indicates that one can treat the groups equally without assigning different class weights and predict all 12 groups at the same time.  
+
+###### Figure1: Distribution of Target Groups
+```{r,echo=FALSE, fig.height=3}
+# figure1: distribution of target group
+g <- ggplot(genderage_train, aes(x=group,fill=group))
+g <- g+geom_bar(stat="count")
+g
+```
+
+##### 2.1 Mobile device properties
+In this session, the relationship between target and mobile device properties is exploit. A good understanding of this is crucial since it is the only info we have when making prediction for over 70% of users in the test set. 
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+# Loading device data
+device <- read.csv(file="phone_brand_device_model.csv",
+                   encoding="UTF-8",
+                   header=T,
+                   numerals="no.loss") 
+
+# remove duplicated rows
+device <- unique(device)
+
+# set system vairable to display Chinese correctly, 
+invisible(Sys.setlocale(category = "LC_ALL", locale = "chs"))
+
+device <- device[-which(duplicated(device$device_id)),]
+genderdevice_train <- merge(genderage_train, device, by="device_id")
+genderdevice_train$phone_brand <- as.factor(as.character(genderdevice_train$phone_brand))
+```
+
+A summary statistics of #users in each brand is given below:
+
+```{r,echo=FALSE}
+tmp <- as.data.frame(table(genderdevice_train$phone_brand))
+summary(tmp$Freq)
+```
+
+It can be seen that there are 50% brands with less than 12 users in the training set, and another 25% with less than 57 users. Making conclusions over such a small user base is risky and prone to overfit. However, there might still be some difference between people who choose the less popular brands and those who choose more popular brands. To check this, the top 10 brands are grouped into "Most popular", and the bottom 75 brands with a total of 486 users are grouped into "Least popular". The percentage of female and male users in each brand-group is shown in figure2. It can be seen that in the least popular group, the percentage of female decreases comparing with that in the most popular group. This also indicates that brand popularity plays a more important role for women than that for men. Therefore, some feature engineering can be done by grouping brands based on their popularity to help differentiating between the target groups.
+
+###### Figure2: Percentage of Male/Female users for different brands
+```{r,echo=FALSE,fig.height=3}
+top10 <- names(sort(table(genderdevice_train$phone_brand),decreasing=T))[1:10]
+bottom75 <- names(sort(table(genderdevice_train$phone_brand),decreasing = F))[1:75]
+genderdevice_train_part <- genderdevice_train[genderdevice_train$phone_brand 
+                                              %in% c(top10,bottom75),]
+genderdevice_train_part$phonegroup <- "Most popular"
+genderdevice_train_part$phonegroup[genderdevice_train_part$phone_brand %in% bottom75]<-"Least popular"
+
+tmp <- as.data.frame(table(genderdevice_train_part$phonegroup,genderdevice_train_part$gender))
+colnames(tmp)[2]<-"Gender"
+g <- ggplot(tmp, aes(x=Var1,y=Freq,fill=Gender))
+g <- g+geom_bar(stat="identity", position="fill", alpha=0.7)
+g <- g+xlab("phone group")+ylab("% of Users")
+g
+```
+
+In figure3, the market coverage is shown for the top 10 brands, which covers over 90% of the user. It can be seeb that male and female have similar preference over brands, with "Xiaomi","Samsung" and "Huawei" being the top-3 dominant brands in both gender groups, accouting for a total coverage of 58%. Some gender difference can also be observed, e.g. the market share difference is in general larger in the male group comparing with that for female. This is further exploit in fugure4. In figure4, the percentage of male and female users for each top 10 brand is shown. It can be seen that there is a diffrence in how well each brand attracts different genders. E.g. OPPO has a more balanced coverage among different genders (44% vs.56%) comparing with Huawei (32% vs.68%). 
+
+###### Figure3: Popularity of phone brands
+```{r,echo=FALSE,fig.height=3.5}
+tmp <- as.data.frame(table(genderdevice_train$phone_brand,genderdevice_train$gender))
+tmp_top10 <- tmp[tmp$Var1 %in% top10,]
+tmp_top10$perct <- tmp_top10$Freq/sum(tmp$Freq)*100
+colnames(tmp_top10)[2]<-"gender"
+
+g <- ggplot(tmp_top10, aes(x=reorder(Var1,perct),y=perct,fill=gender))
+g <- g+geom_bar(stat="identity",position="dodge", alpha=0.7)
+g <- g+xlab("phone_brand")
+g <- g+ylab("% of market coverage")
+g
+```
+
+###### Figure4: Percentage of Male/Female users 
+```{r,echo=FALSE,fig.height=3}
+g <- ggplot(tmp_top10, aes(x=reorder(Var1,perct),y=perct,fill=gender))
+g <- g+geom_bar(stat="identity", position="fill", alpha=0.7)
+g <- g+xlab("phone brand")+ylab("% of Users")
+g <- g+coord_flip()
+g
+```
+
+Next, we explore the relationship between age and phone brand. In figure5, the distribution of the top 5 brands over different ages is shown. It can be seen a majority of the OPPO and vivo users is from the younger groups, while SamSung and Huawei have their largest user base in more senior groups. 
+
+###### Figure 5: Brand distribution among ages
+```{r,echo=FALSE,fig.height=3.5}
+genderdevice_train_top5 <- genderdevice_train[genderdevice_train$phone_brand %in% top10[1:5],]
+
+g1 <- ggplot(genderdevice_train_top5, aes(x=age, colour = phone_brand)) +
+  geom_density(alpha=0.3) +
+  theme(legend.position="top",legend.title=element_blank())
+g1
+```
+
+The phone popularity difference among different age groups is further exploit in figure6. In figure6, the relative coverage of the top-5 brands in each target groups is shown. It can be seen that as age goes up, the market share for OPPO and vivo drops for both gender, and the market share for Samsung and Huawei steadily increases. This also indicates that phone brand is helpful in differentating between the age groups. Similar analysis can be done regarding device models.
+
+###### Figure 6: Brand coverage in diffrent groups
+```{r,echo=FALSE,fig.height=4}
+tmp_top5 <- as.data.frame(table(genderdevice_train_top5$phone_brand, genderdevice_train_top5$group))
+tmp_top5 <- tmp_top5[tmp_top5$Var1 %in% top10[1:5],]
+g2 <- ggplot(tmp_top5, aes(x=Var2, y=Freq, fill=Var1)) +
+  geom_bar(stat="identity",position="fill",alpha=0.7) +
+  xlab("Gender-Age group") + 
+  ylab("% of Users") + 
+  theme(legend.position="top",legend.title=element_blank())
+g2
+
+#grid.arrange(g1,g2,nrow=1)
+```
+
+#### 2.2 Events
+In this session, we explore the relationship between events and the target groups, using the 30% of training data with events info. Figure7 shows the percentage of active users throughout a day within some target groups. An user is considered active during a specific hour if there is at least one event from that user during that hour. The percentage of active user within group k is then calculated as:
+$$\frac{\#activeuser \in group_k}{\#user \in group_k}$$
+It can be seen that the phone usage pattern is consistent across all groups, with the most active time between 10-23, and the quitest time between 2-7. However, there is also a clear difference in the active level between the groups. In general, men is more active than women from the same age group, e.g. F33-42 vs. M32-38.
+
+###### Figure7: Percentage of active users in different groups
+```{r,echo=FALSE,fig.height=3.5,message=FALSE, results='hide'}
+invisible(genderevent <- fread("genderevent.csv"))
+genderevent_train <- genderevent[!is.na(genderevent$group),]
+tmp <- as.data.frame(table(genderevent_train$device_id,genderevent_train$hour))
+colnames(tmp)<-c("device_id","hour","nofevents_hour")
+
+# merge events info with gender-age info
+genderage_train_event <- genderage_train[genderage_train$device_id %in%
+                                           tmp$device_id,]
+tmp <- merge(tmp, genderage_train_event, by="device_id")                       
+tmp$hasevent <- tmp$nofevents_hour>0
+
+tmp2 <- tmp[tmp$hasevent==T,]
+tmp3 <- tmp2 %>% group_by(group,hour) %>% summarise(n=n()) 
+tmp4 <- tmp %>% group_by(group,hour) %>% summarise(n=n()) 
+tmp3$perct <- tmp3$n/tmp4$n*100
+tmp3$hour <- as.integer(tmp3$hour)
+
+g <- ggplot(tmp3[tmp3$group %in% c("F23-","M22-","F33-42","M32-38"),],
+            aes(x=hour,y=perct,colour=group, shape=group)) +
+  geom_line() +
+  geom_point() +
+  scale_x_continuous(breaks=1:24) +
+  ylab("Active User (%) with a group")
+g
+```
+
+The difference of phone usage between groups is further illustrated in figure8. The percentage of active user from group k at a specific hour is calculated as:
+$$\frac{\#activeuser \in group_k}{\#activeuser \in allgroups}$$
+
+We can see that the composition of active users changes throughout the day. E.g. during the early morning, between 5-8 am, there is a higher percentage of active user coming from the senior groups, such as M39+ and F43+, and lower percentage of active users from the younger groups, such as F23- and M22-, comparing with other times througout the day. Therefore, some feature engineering can be done to indicate the active level of a user in different time interval to help differentiating between the target groups.  
+
+###### Figure8: Phone usage between groups
+```{r,echo=FALSE,fig.height=4,message=FALSE}
+g <- ggplot(tmp3, aes(x=hour, y=n, fill=group)) +
+  geom_bar(stat="identity", position="fill", alpha=0.7) +
+  scale_x_continuous(breaks=1:24) +
+  ylab("Active User (%) among all groups")
+g
+```
+
+####3. Further work
+From the exploratory analysis above, several interesting differences between the gender-age groups on phone usage and brand selection are observed. They provide insights on how feature engineering can be done on brand and events to help differentiating between the target groups. Further analysis can be done regarding how device model, app usage, installed app and app category relates with people's gender and age.
+
