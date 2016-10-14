@@ -70,10 +70,10 @@ trainmodel(param2, ntree2, seed2, modelnr=2,
 ## -------------- 3. Preparing input for stage 2------------------------
 ## ---------------------------------------------------------------------
 # read in training data from stage1
-train_stage1_1 <- read.csv(file="stacking/train_data_stage1_1_github.csv", 
+train_stage1_1 <- read.csv(file="stacking/train_data_stage1_1.csv", 
                            header=T, 
                            numerals = "no.loss")
-train_stage1_2 <- read.csv(file="stacking/train_data_stage1_2_github.csv", 
+train_stage1_2 <- read.csv(file="stacking/train_data_stage1_2.csv", 
                            header=T, 
                            numerals = "no.loss")
 
@@ -81,10 +81,10 @@ colnames(train_stage1_1) <- c("device_id",group_name)
 colnames(train_stage1_2) <- c("device_id",group_name)
 
 # read in test data from stage1
-test_stage1_1 <- read.csv(file="stacking/test_stage1_1_github.csv",
+test_stage1_1 <- read.csv(file="stacking/test_stage1_1.csv",
                           header=T,
                           numerals = "no.loss")
-test_stage1_2 <- read.csv(file="stacking/test_stage1_2_github.csv",
+test_stage1_2 <- read.csv(file="stacking/test_stage1_2.csv",
                           header=T,
                           numerals = "no.loss")
 
@@ -205,7 +205,7 @@ trainmodel <- function(params, ntree=100, seed=314, modelnr=1,
     train_stage1 <- rbind(train_stage1, train_stage1_tmp)
   }
   
-  filename <- paste("stacking/train_data_stage1_", modelnr, "_github.csv", sep="")
+  filename <- paste("stacking/train_data_stage1_", modelnr, ".csv", sep="")
   write.csv(file=filename, train_stage1, row.names = F)
   
   # testing data for stage2
@@ -222,7 +222,7 @@ trainmodel <- function(params, ntree=100, seed=314, modelnr=1,
   test_stage1_1 <- cbind(id=id[idx_test],as.data.frame(pred_detail))
   colnames(test_stage1_1) <- c("device_id",group_name)
   
-  filename <- paste("stacking/test_stage1_", modelnr, "_github.csv", sep="")
+  filename <- paste("stacking/test_stage1_", modelnr, ".csv", sep="")
   write.csv(file=filename,test_stage1_1,row.names = F)
   
 }
