@@ -6,10 +6,6 @@
 ## Xun Qiu
 ## 2016-08
 
-# results:
-# xgblinear: 2.2727, ntree=212
-# xgbtree: 2.278， ntree=1158
-
 ## Load libraries
 library(data.table)
 library(Matrix)
